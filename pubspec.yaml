@@ -1,0 +1,25 @@
+name: medicine_tracker
+description: Medicine cabinet, dose schedules and private on-device reminders.
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: ^3.8.1
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.4.0
+  flutter_secure_storage: ^9.2.4
+  flutter_local_notifications: ^19.4.2
+  timezone: ^0.10.1
+  flutter_timezone: ^4.1.1
+  file_picker: ^10.3.3
+  path_provider: ^2.1.5
+  open_filex: ^4.7.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/branding/app-icon.png
