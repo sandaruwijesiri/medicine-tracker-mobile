@@ -47,7 +47,8 @@ List<LocalReminder> planReminders(
       (s) =>
           s['active'] == true &&
           state.medicine(s['medicineId']) != null &&
-          state.medicine(s['medicineId'])?['archivedAt'] == null,
+          (state.medicine(s['medicineId'])?['archivedAt'] == null ||
+              anyBrandSchedule(s)),
     )) {
       final location = tz.getLocation(str(schedule['zone']));
       final local = tz.TZDateTime.from(now, location);
@@ -193,7 +194,7 @@ bool retainPendingReminder(
       if (schedule == null ||
           schedule['active'] != true ||
           medicine == null ||
-          medicine['archivedAt'] != null) {
+          (medicine['archivedAt'] != null && !anyBrandSchedule(schedule))) {
         return false;
       }
       if (!(schedule['times'] as List).contains(data['time'])) return false;

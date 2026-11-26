@@ -750,8 +750,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 if (await confirm(
                   archived ? 'Archive medicine?' : 'Restore medicine?',
                   archived
-                      ? 'Stock is preserved and schedules are paused.'
-                      : 'The medicine returns to your cabinet. Schedules remain paused.',
+                      ? 'Stock is preserved. Specific-brand schedules pause. Any-brand schedules continue while eligible active brands remain.'
+                      : 'The medicine returns to your cabinet. Previously paused schedules remain paused.',
                 )) {
                   await perform(
                     () => app.mutate('medicine-archive', {
@@ -816,7 +816,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 children: [
                   Expanded(
                     child: Text(
-                      medicineName(data.medicine(s['medicineId'])),
+                      scheduleMedicineName(data.medicine(s['medicineId']), s),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),

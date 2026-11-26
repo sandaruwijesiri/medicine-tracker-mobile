@@ -557,26 +557,29 @@ class MedicineForms {
         'instructions': '',
         'doseMode': 'quantity',
         'doseValue': 1,
-        'drugNameOnly': false,
+        'medicineSelection':
+            schedule == null || calculation?['drugNameOnly'] == true
+            ? 'drug'
+            : 'brand',
         ...?schedule,
         if (schedule != null)
           'timesText': (schedule['times'] as List).join(', '),
         if (calculation != null) 'doseMode': calculation['mode'],
         if (calculation != null) 'doseValue': calculation['value'],
-        if (calculation != null)
-          'drugNameOnly': calculation['drugNameOnly'] == true,
       },
       fields: (e) => [
-        e.select('medicineId', 'Medicine', {
-          '': 'Choose medicine',
-          for (final m in state.activeMedicines)
-            str(m['id']): '${medicineName(m)} · ${m['strength']}',
+        e.select('medicineSelection', 'Medicine selection', {
+          'drug': 'Drug name and pill strength — any brand',
+          'brand': 'Specific brand / medicine',
         }),
-        e.toggle(
-          'drugNameOnly',
-          'Use eligible brands of this drug',
-          subtitle:
-              'Pool compatible strengths and brands when confirming doses.',
+        e.select(
+          'medicineId',
+          'Medicine',
+          scheduleMedicineOptions(
+            state,
+            anyBrand: e.values['medicineSelection'] == 'drug',
+            referenceId: str(schedule?['medicineId']),
+          ),
         ),
         e.select('doseMode', 'Dose entry', {
           'quantity': 'Stock quantity',
@@ -634,7 +637,7 @@ class MedicineForms {
             'locationId': e.values['locationId'] == ''
                 ? null
                 : e.values['locationId'],
-            'drugNameOnly': e.values['drugNameOnly'],
+            'drugNameOnly': e.values['medicineSelection'] == 'drug',
             'doseMode': e.values['doseMode'],
             'doseValue': e.numeric('doseValue'),
             'times': e

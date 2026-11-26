@@ -88,6 +88,19 @@ void main() {
     expect(list.length, 2);
     expect(list.every((n) => n.data['date'] == '2026-11-20'), true);
   });
+  test('any-brand reminders continue when the reference brand is archived', () {
+    final state = sample(archived: true);
+    state.json['schedules'][0]['doseCalculation'] = {'drugNameOnly': true};
+    state.json['medicines'].add({
+      'id': 'alternative',
+      'name': 'Example',
+      'archivedAt': null,
+    });
+    final now = DateTime.utc(2026, 11, 19, 3);
+    expect(planReminders(state, {}, now, 'UTC', stock: false), isNotEmpty);
+    state.json['schedules'][0]['active'] = false;
+    expect(planReminders(state, {}, now, 'UTC', stock: false), isEmpty);
+  });
   test('confirmed/skipped, inactive and archived doses do not schedule', () {
     final now = DateTime.utc(2026, 11, 19, 3);
     final done = sample(

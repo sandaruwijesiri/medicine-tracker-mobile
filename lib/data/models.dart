@@ -22,6 +22,40 @@ String medicineName(Json? m) {
       : '$brand · $name';
 }
 
+bool anyBrandSchedule(Json schedule) =>
+    (schedule['doseCalculation'] as Map?)?['drugNameOnly'] == true;
+String scheduleMedicineName(Json? medicine, Json schedule) =>
+    anyBrandSchedule(schedule)
+    ? '${str(medicine?['name'])} · Any brand'
+    : medicineName(medicine);
+
+// Preserve the stored reference ID when grouping interchangeable brand entries.
+// Changing it would detach a schedule from its existing dose history.
+Map<String, String> scheduleMedicineOptions(
+  CabinetState state, {
+  required bool anyBrand,
+  String referenceId = '',
+}) {
+  final options = <String, String>{'': 'Choose medicine'};
+  final medicines = [...state.activeMedicines];
+  final reference = state.medicine(referenceId);
+  if (anyBrand && reference != null) {
+    medicines.removeWhere((m) => m['id'] == referenceId);
+    medicines.insert(0, reference);
+  }
+  final seen = <String>{};
+  for (final medicine in medicines) {
+    final name = str(medicine['name']);
+    if (anyBrand && name.isEmpty) continue;
+    final key =
+        '${name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ')}|${str(medicine['strength']).toLowerCase().replaceAll(RegExp(r'\s+'), '')}|${medicine['unit']}';
+    if (anyBrand && !seen.add(key)) continue;
+    options[str(medicine['id'])] =
+        '${anyBrand ? name : medicineName(medicine)} · ${medicine['strength']} · ${medicine['unit']}';
+  }
+  return options;
+}
+
 class CabinetState {
   CabinetState(this.json);
   final Json json;
@@ -104,8 +138,14 @@ DateTime? occurrenceTime(Json dose) {
   final local = DateTime.tryParse('${dose['date']}T${dose['time']}');
   if (local == null) return null;
   try {
-    return tz.TZDateTime(tz.getLocation(str(dose['zone'])), local.year,
-        local.month, local.day, local.hour, local.minute);
+    return tz.TZDateTime(
+      tz.getLocation(str(dose['zone'])),
+      local.year,
+      local.month,
+      local.day,
+      local.hour,
+      local.minute,
+    );
   } catch (_) {
     return local;
   }
