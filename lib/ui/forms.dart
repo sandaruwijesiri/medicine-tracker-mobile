@@ -114,6 +114,46 @@ class EditorState extends State<Editor> {
     );
   }
 
+  Widget time(String key, String label) {
+    final controller = _controllers.putIfAbsent(
+      key,
+      () => TextEditingController(text: str(values[key])),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: controller,
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: const Icon(Icons.schedule),
+        ),
+        validator: (value) =>
+            RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(value ?? '')
+            ? null
+            : 'Choose a reminder time',
+        onTap: saving
+            ? null
+            : () async {
+                final parts = controller.text.split(':');
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(
+                    hour: int.tryParse(parts.first) ?? 9,
+                    minute: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
+                  ),
+                );
+                if (picked != null && mounted) {
+                  setState(
+                    () => controller.text =
+                        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
+                  );
+                }
+              },
+      ),
+    );
+  }
+
   Widget times(String key) {
     final current =
         value(
@@ -311,6 +351,14 @@ class MedicineForms {
       'initialLocation': state.locations.firstOrNull?['id'] ?? '',
       ...?medicine,
     };
+    final alert = stockAlertSettings(medicine ?? initial);
+    initial.addAll({
+      'alertEnabled': alert['enabled'],
+      'alertScope': alert['scope'],
+      'alertMetric': alert['metric'],
+      'lowStock': alert['threshold'],
+      'alertTime': alert['time'],
+    });
     final rules = medicine?['doseRules'] as Map?;
     initial['strengthAmount'] = rules?['strengthAmount'] ?? '';
     initial['strengthUnit'] = rules?['strengthUnit'] ?? 'mg';
@@ -367,11 +415,27 @@ class MedicineForms {
           for (final c in state.categories)
             str(c['id']): state.category(c['id']),
         }),
+        const Text('Low-stock alerts'),
+        e.toggle('alertEnabled', 'Enable alerts for this medicine'),
+        e.select('alertScope', 'Stock to monitor', {
+          'brand': 'This brand / medicine only',
+          'drug': 'Drug and strength — all brands',
+        }),
+        e.select('alertMetric', 'Threshold type', {
+          'days': 'Days of supply',
+          'quantity': 'Stock quantity',
+        }),
         e.field(
           'lowStock',
-          'Low-stock alert (days of supply)',
+          e.values['alertMetric'] == 'days'
+              ? 'Days remaining threshold'
+              : 'Quantity threshold (stock units)',
           required: true,
           numeric: true,
+        ),
+        e.time('alertTime', 'Daily reminder time'),
+        const Text(
+          'Drug alerts combine active brands of the same drug, strength and stock unit. Expired stock is excluded. Reminders use your phone time zone and last synced data.',
         ),
         e.field('notes', 'Notes', lines: 3),
         if (medicine == null &&
@@ -438,6 +502,13 @@ class MedicineForms {
             key: e.value(key),
           'unit': unitLocked ? medicine['unit'] : e.values['unit'],
           'lowStock': e.numeric('lowStock'),
+          'lowStockAlert': {
+            'enabled': e.values['alertEnabled'] == true,
+            'scope': e.values['alertScope'],
+            'metric': e.values['alertMetric'],
+            'threshold': e.numeric('lowStock'),
+            'time': e.value('alertTime'),
+          },
           'categoryId': e.values['categoryId'] == ''
               ? null
               : e.values['categoryId'],

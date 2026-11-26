@@ -1223,7 +1223,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             SwitchListTile.adaptive(
               title: const Text('Low-stock reminders'),
               subtitle: const Text(
-                'At 09:00 from your last synced supply estimate',
+                'At each medicine’s configured time, using your last synced stock and supply',
               ),
               value: app.stockReminders,
               onChanged: (v) => perform(

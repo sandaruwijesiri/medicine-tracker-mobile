@@ -101,39 +101,61 @@ List<LocalReminder> planReminders(
   if (stock) {
     final location = tz.getLocation(deviceZone);
     final local = tz.TZDateTime.from(now, location);
-    final calculated = DateTime.tryParse(str(insights['calculatedAt'])) ?? now;
-    final elapsed = now.difference(calculated).inDays.clamp(0, 366);
-    final supply = records(insights['medicines']);
-    for (var offset = 0; offset < 7; offset++) {
-      final at = tz.TZDateTime(
-        location,
-        local.year,
-        local.month,
-        local.day + offset,
-        9,
-      );
-      if (!at.isAfter(now)) continue;
-      final low = supply.where((s) {
-        final medicine = state.medicine(s['medicineId']);
-        return medicine != null &&
-            medicine['archivedAt'] == null &&
-            s['daysOfSupply'] != null &&
-            number(s['daysOfSupply']) - elapsed - offset <=
-                number(medicine['lowStock']);
-      }).toList();
-      if (low.isNotEmpty) {
-        result.add(
-          LocalReminder(
-            key: 'stock/${dateText(at)}',
-            when: at,
-            type: 'low_stock',
-            data: {
-              'date': dateText(at),
-              'medicineIds': low.map((m) => m['medicineId']).toList(),
-            },
-          ),
+    final groups = <String, List<dynamic>>{};
+    for (final medicine in state.activeMedicines) {
+      final settings = stockAlertSettings(medicine);
+      if (settings['enabled'] != true) continue;
+      final time = str(settings['time']);
+      final parts = time.split(':');
+      if (parts.length != 2) continue;
+      final hour = int.tryParse(parts[0]);
+      final minute = int.tryParse(parts[1]);
+      if (hour == null || minute == null || hour > 23 || minute > 59) continue;
+      for (var offset = 0; offset < 7; offset++) {
+        final at = tz.TZDateTime(
+          location,
+          local.year,
+          local.month,
+          local.day + offset,
+          hour,
+          minute,
         );
+        if (!at.isAfter(now) || at.hour != hour || at.minute != minute) {
+          continue;
+        }
+        final alert = stockAlertStatus(
+          state,
+          medicine,
+          insights,
+          local,
+          futureDays: offset,
+        );
+        if (alert['low'] != true) continue;
+        final key = '${dateText(at)}/$time';
+        final list = groups.putIfAbsent(
+          key,
+          () => [at, <String>[], <String>{}],
+        );
+        final dedupe =
+            '${alert['groupKey']}/${settings['metric']}/${settings['threshold']}';
+        if ((list[2] as Set<String>).add(dedupe)) {
+          (list[1] as List<String>).add(str(medicine['id']));
+        }
       }
+    }
+    for (final group in groups.entries) {
+      result.add(
+        LocalReminder(
+          key: 'stock/${group.key}',
+          when: group.value[0] as tz.TZDateTime,
+          type: 'low_stock',
+          data: {
+            'date': dateText(group.value[0] as tz.TZDateTime),
+            'medicineIds': group.value[1],
+            'time': group.key.split('/').last,
+          },
+        ),
+      );
     }
   }
   final groups = <int, List<LocalReminder>>{};
@@ -221,21 +243,20 @@ bool retainPendingReminder(
     }
     if (data['type'] == 'low_stock' && stock) {
       final local = tz.TZDateTime.from(at, tz.getLocation(deviceZone));
-      if (local.hour != 9 ||
-          local.minute != 0 ||
-          dateText(local) !=
-              (data['date'] ?? str(data['key']).split('/').last)) {
-        return false;
-      }
-      final calculated =
-          DateTime.tryParse(str(insights['calculatedAt'])) ?? now;
-      final elapsed = now.difference(calculated).inDays.clamp(0, 366);
-      return records(insights['medicines']).any((s) {
-        final medicine = state.medicine(s['medicineId']);
-        return medicine != null &&
-            medicine['archivedAt'] == null &&
-            s['daysOfSupply'] != null &&
-            number(s['daysOfSupply']) - elapsed <= number(medicine['lowStock']);
+      if (dateText(local) != data['date']) return false;
+      final time =
+          '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+      final ids = data['medicineIds'] as List?;
+      return state.activeMedicines.any((medicine) {
+        if (ids != null && !ids.contains(medicine['id'])) return false;
+        final alert = stockAlertStatus(
+          state,
+          medicine,
+          insights,
+          tz.TZDateTime.from(now, tz.getLocation(deviceZone)),
+        );
+        return alert['low'] == true &&
+            (alert['settings'] as Map)['time'] == time;
       });
     }
   } catch (_) {

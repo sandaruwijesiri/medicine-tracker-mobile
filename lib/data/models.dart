@@ -150,3 +150,74 @@ DateTime? occurrenceTime(Json dose) {
     return local;
   }
 }
+
+Json stockAlertSettings(Json medicine) => medicine['lowStockAlert'] is Map
+    ? Map<String, dynamic>.from(medicine['lowStockAlert'] as Map)
+    : {
+        'enabled': true,
+        'scope': 'brand',
+        'metric': 'days',
+        'threshold': medicine['lowStock'] ?? 10,
+        'time': '09:00',
+      };
+Json stockAlertStatus(
+  CabinetState state,
+  Json medicine,
+  Json insights,
+  DateTime now, {
+  int futureDays = 0,
+}) {
+  final settings = stockAlertSettings(medicine);
+  String norm(dynamic v) =>
+      str(v).trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  final ids = state.activeMedicines
+      .where(
+        (m) => settings['scope'] == 'brand'
+            ? m['id'] == medicine['id']
+            : norm(m['name']).isNotEmpty &&
+                  norm(m['name']) == norm(medicine['name']) &&
+                  norm(m['strength']).replaceAll(' ', '') ==
+                      norm(medicine['strength']).replaceAll(' ', '') &&
+                  m['unit'] == medicine['unit'],
+      )
+      .map((m) => m['id'])
+      .toSet();
+  final date = dateText(now.add(Duration(days: futureDays)));
+  final rawQuantity = state.stocks
+      .where(
+        (b) =>
+            ids.contains(b['medicineId']) &&
+            (str(b['expiry']).isEmpty || str(b['expiry']).compareTo(date) >= 0),
+      )
+      .fold(0.0, (sum, b) => sum + number(b['quantity']));
+  final quantity = double.parse(rawQuantity.toStringAsFixed(3));
+  final insight = CabinetState.find(
+    records(
+      insights['medicines'],
+    ).map((s) => {...s, 'id': s['medicineId']}).toList(),
+    medicine['id'],
+  );
+  final stock = insight?['stockAlert'] as Map?;
+  final remaining = stock != null
+      ? stock['daysRemaining']
+      : insight?['daysOfSupply'];
+  final calculated = DateTime.tryParse(str(insights['calculatedAt'])) ?? now;
+  final elapsed = now.difference(calculated).inDays.clamp(0, 366);
+  final days = remaining == null
+      ? null
+      : (number(remaining) - elapsed - futureDays).clamp(0, double.infinity);
+  final value = settings['metric'] == 'quantity' ? quantity : days;
+  return {
+    'settings': settings,
+    'quantity': quantity,
+    'daysRemaining': days,
+    'low':
+        medicine['archivedAt'] == null &&
+        settings['enabled'] == true &&
+        value != null &&
+        value <= number(settings['threshold']),
+    'groupKey': settings['scope'] == 'brand'
+        ? medicine['id']
+        : '${norm(medicine['name'])}|${norm(medicine['strength']).replaceAll(' ', '')}|${medicine['unit']}',
+  };
+}
