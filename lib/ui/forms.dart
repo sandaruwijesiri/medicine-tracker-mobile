@@ -331,6 +331,64 @@ class EditorState extends State<Editor> {
 }
 
 class MedicineForms {
+  static List<Widget> stockAlertFields(EditorState e) => [
+    e.toggle('alertEnabled', 'Enable low-stock alerts'),
+    e.select('alertScope', 'Stock to monitor', {
+      'brand': 'This brand / medicine only',
+      'drug': 'Drug and strength — all brands',
+    }),
+    e.select('alertMetric', 'Threshold type', {
+      'days': 'Days of supply',
+      'quantity': 'Stock quantity',
+    }),
+    e.field(
+      'lowStock',
+      e.values['alertMetric'] == 'days'
+          ? 'Days remaining threshold'
+          : 'Quantity threshold (stock units)',
+      required: true,
+      numeric: true,
+    ),
+    e.time('alertTime', 'Daily reminder time'),
+    const Text(
+      'Drug alerts combine the same drug, strength and stock unit. Quantity thresholds use each medicine’s stock unit. Reminders use your phone time zone and last synced data.',
+    ),
+  ];
+  static Future<void> stockAlertDefaults(
+    BuildContext context,
+    AppController app,
+  ) {
+    final settings = app.state!.json['stockAlertDefaults'] is Map
+        ? Map<String, dynamic>.from(
+            app.state!.json['stockAlertDefaults'] as Map,
+          )
+        : defaultStockAlerts;
+    return openEditor(
+      context,
+      title: 'Global low-stock defaults',
+      initial: {
+        'alertEnabled': settings['enabled'],
+        'alertScope': settings['scope'],
+        'alertMetric': settings['metric'],
+        'lowStock': settings['threshold'],
+        'alertTime': settings['time'],
+      },
+      fields: (e) => [
+        const Text(
+          'Applies to medicines using global defaults. Medicine overrides, including alerts off, take priority.',
+        ),
+        ...stockAlertFields(e),
+      ],
+      save: (e) => app.mutate('account/stock-alert-defaults', {
+        'enabled': e.values['alertEnabled'] == true,
+        'scope': e.values['alertScope'],
+        'metric': e.values['alertMetric'],
+        'threshold': e.numeric('lowStock'),
+        'time': e.value('alertTime'),
+      }),
+    );
+  }
+
   static Future<void> medicine(
     BuildContext context,
     AppController app, {
@@ -351,8 +409,15 @@ class MedicineForms {
       'initialLocation': state.locations.firstOrNull?['id'] ?? '',
       ...?medicine,
     };
-    final alert = stockAlertSettings(medicine ?? initial);
+    final alert = stockAlertSettings(
+      medicine ?? initial,
+      state.json['stockAlertDefaults'] is Map
+          ? Map<String, dynamic>.from(state.json['stockAlertDefaults'] as Map)
+          : null,
+    );
     initial.addAll({
+      'inheritStockAlerts':
+          medicine == null || !hasStockAlertOverride(medicine),
       'alertEnabled': alert['enabled'],
       'alertScope': alert['scope'],
       'alertMetric': alert['metric'],
@@ -416,27 +481,13 @@ class MedicineForms {
             str(c['id']): state.category(c['id']),
         }),
         const Text('Low-stock alerts'),
-        e.toggle('alertEnabled', 'Enable alerts for this medicine'),
-        e.select('alertScope', 'Stock to monitor', {
-          'brand': 'This brand / medicine only',
-          'drug': 'Drug and strength — all brands',
-        }),
-        e.select('alertMetric', 'Threshold type', {
-          'days': 'Days of supply',
-          'quantity': 'Stock quantity',
-        }),
-        e.field(
-          'lowStock',
-          e.values['alertMetric'] == 'days'
-              ? 'Days remaining threshold'
-              : 'Quantity threshold (stock units)',
-          required: true,
-          numeric: true,
+        e.toggle(
+          'inheritStockAlerts',
+          'Use global defaults',
+          subtitle:
+              'Global changes apply automatically unless you configure a medicine override.',
         ),
-        e.time('alertTime', 'Daily reminder time'),
-        const Text(
-          'Drug alerts combine active brands of the same drug, strength and stock unit. Expired stock is excluded. Reminders use your phone time zone and last synced data.',
-        ),
+        if (e.values['inheritStockAlerts'] != true) ...stockAlertFields(e),
         e.field('notes', 'Notes', lines: 3),
         if (medicine == null &&
             state.medicines.any((m) => m['archivedAt'] != null))
@@ -501,14 +552,18 @@ class MedicineForms {
           for (final key in ['name', 'brandName', 'strength', 'notes'])
             key: e.value(key),
           'unit': unitLocked ? medicine['unit'] : e.values['unit'],
-          'lowStock': e.numeric('lowStock'),
-          'lowStockAlert': {
-            'enabled': e.values['alertEnabled'] == true,
-            'scope': e.values['alertScope'],
-            'metric': e.values['alertMetric'],
-            'threshold': e.numeric('lowStock'),
-            'time': e.value('alertTime'),
-          },
+          'lowStock': e.values['inheritStockAlerts'] == true
+              ? 10
+              : e.numeric('lowStock'),
+          'lowStockAlert': e.values['inheritStockAlerts'] == true
+              ? null
+              : {
+                  'enabled': e.values['alertEnabled'] == true,
+                  'scope': e.values['alertScope'],
+                  'metric': e.values['alertMetric'],
+                  'threshold': e.numeric('lowStock'),
+                  'time': e.value('alertTime'),
+                },
           'categoryId': e.values['categoryId'] == ''
               ? null
               : e.values['categoryId'],

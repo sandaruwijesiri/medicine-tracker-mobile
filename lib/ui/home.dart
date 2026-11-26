@@ -1199,6 +1199,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       heading('Make it yours', str(app.user?['email'])),
       Card(
         child: ListTile(
+          title: const Text('Global low-stock defaults'),
+          subtitle: const Text(
+            'Default threshold, scope and reminder time. Medicine overrides take priority.',
+          ),
+          trailing: const Icon(Icons.edit_outlined),
+          onTap: app.busy || app.offline
+              ? null
+              : () => MedicineForms.stockAlertDefaults(context, app),
+        ),
+      ),
+      Card(
+        child: ListTile(
           title: const Text('Sign-in username'),
           subtitle: Text(
             '${str(app.user?['username']).isEmpty ? 'Choose a username' : str(app.user?['username'])}\nEmail sign-in and password recovery remain available.',

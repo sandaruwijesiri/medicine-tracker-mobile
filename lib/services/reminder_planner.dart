@@ -103,7 +103,12 @@ List<LocalReminder> planReminders(
     final local = tz.TZDateTime.from(now, location);
     final groups = <String, List<dynamic>>{};
     for (final medicine in state.activeMedicines) {
-      final settings = stockAlertSettings(medicine);
+      final settings = stockAlertSettings(
+        medicine,
+        state.json['stockAlertDefaults'] is Map
+            ? Map<String, dynamic>.from(state.json['stockAlertDefaults'] as Map)
+            : null,
+      );
       if (settings['enabled'] != true) continue;
       final time = str(settings['time']);
       final parts = time.split(':');

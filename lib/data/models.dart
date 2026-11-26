@@ -151,15 +151,27 @@ DateTime? occurrenceTime(Json dose) {
   }
 }
 
-Json stockAlertSettings(Json medicine) => medicine['lowStockAlert'] is Map
-    ? Map<String, dynamic>.from(medicine['lowStockAlert'] as Map)
-    : {
-        'enabled': true,
-        'scope': 'brand',
-        'metric': 'days',
-        'threshold': medicine['lowStock'] ?? 10,
-        'time': '09:00',
-      };
+const defaultStockAlerts = {
+  'enabled': true,
+  'scope': 'brand',
+  'metric': 'days',
+  'threshold': 10,
+  'time': '09:00',
+};
+bool hasStockAlertOverride(Json medicine) =>
+    medicine['lowStockAlert'] is Map || (medicine['lowStock'] ?? 10) != 10;
+Json stockAlertSettings(Json medicine, [Json? defaults]) {
+  final Json settings = medicine['lowStockAlert'] is Map
+      ? Map<String, dynamic>.from(medicine['lowStockAlert'] as Map)
+      : (medicine['lowStock'] ?? 10) != 10
+      ? {...defaultStockAlerts, 'threshold': medicine['lowStock']}
+      : {...(defaults ?? defaultStockAlerts)};
+  if (settings['scope'] == 'drug' && str(medicine['name']).isEmpty) {
+    settings['scope'] = 'brand';
+  }
+  return settings;
+}
+
 Json stockAlertStatus(
   CabinetState state,
   Json medicine,
@@ -167,7 +179,12 @@ Json stockAlertStatus(
   DateTime now, {
   int futureDays = 0,
 }) {
-  final settings = stockAlertSettings(medicine);
+  final settings = stockAlertSettings(
+    medicine,
+    state.json['stockAlertDefaults'] is Map
+        ? Map<String, dynamic>.from(state.json['stockAlertDefaults'] as Map)
+        : null,
+  );
   String norm(dynamic v) =>
       str(v).trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
   final ids = state.activeMedicines
